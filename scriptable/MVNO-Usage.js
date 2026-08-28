@@ -123,7 +123,12 @@ function addLineRow(container, line, { showVoiceSms, barWidth }) {
   }
 }
 
-function addHeader(w, data) {
+// 제목-본문, 본문-갱신시각 사이 간격. small은 높이가 빠듯해 조금 좁게 잡는다.
+function edgeGap(family) {
+  return family === "small" ? 8 : 12;
+}
+
+function addHeader(w, data, gap) {
   const head = w.addStack();
   head.centerAlignContent();
   const title = head.addText("MVNO 잔여량");
@@ -138,11 +143,11 @@ function addHeader(w, data) {
     warn.font = Font.systemFont(10);
     warn.textColor = new Color("#EA002C");
   }
-  w.addSpacer(4);
+  w.addSpacer(gap);
 }
 
-function addFooter(w, data) {
-  w.addSpacer(4);
+function addFooter(w, data, gap) {
+  w.addSpacer(gap);
   const footer = w.addText(formatRefreshedAt(data.lastRefreshAt));
   footer.font = Font.systemFont(9);
   footer.textColor = Color.gray();
@@ -155,9 +160,10 @@ function buildWidget(data, family) {
   w.setPadding(12, 14, 10, 14);
 
   const lines = data.lines ?? [];
+  const gap = edgeGap(family);
 
   if (family === "small") {
-    addHeader(w, data);
+    addHeader(w, data, gap);
     if (lines.length === 0) {
       w.addText("표시할 회선 없음").font = Font.systemFont(12);
     } else {
@@ -170,7 +176,7 @@ function buildWidget(data, family) {
         more.textColor = Color.gray();
       }
     }
-    addFooter(w, data);
+    addFooter(w, data, gap);
     return w;
   }
 
@@ -178,7 +184,7 @@ function buildWidget(data, family) {
   const showVoiceSms = family === "large";
   const barWidth = family === "medium" ? 130 : 260;
 
-  addHeader(w, data);
+  addHeader(w, data, gap);
   if (lines.length === 0) {
     w.addText("표시할 회선이 없습니다. 웹에서 로그인해주세요.").font = Font.systemFont(12);
   } else {
@@ -193,7 +199,7 @@ function buildWidget(data, family) {
       more.textColor = Color.gray();
     }
   }
-  addFooter(w, data);
+  addFooter(w, data, gap);
   return w;
 }
 
