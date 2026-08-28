@@ -1,0 +1,26 @@
+{
+  "name": "mvno-usage-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "알뜰폰 5개 사업자 로그인/사용량 수집 서버. Scriptable 위젯에 정제된 JSON을 제공한다.",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "postinstall": "playwright install chromium"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "playwright": "^1.47.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.5.4",
+    "@types/ws": "^8.5.12",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  }
+}

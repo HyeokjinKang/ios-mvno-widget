@@ -1,0 +1,63 @@
+:root {
+  color-scheme: light dark;
+  --skt: #E8192C;
+  --kt: #2E9E92;
+  --lgu: #FF8AC7;
+}
+* { box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Pretendard", "Malgun Gothic", sans-serif;
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px 64px;
+  line-height: 1.5;
+}
+h1 { font-size: 1.4rem; margin-bottom: 4px; }
+.sub, .muted { color: #888; font-size: 0.9rem; }
+code { background: #8883; padding: 1px 5px; border-radius: 4px; }
+pre { background: #8883; padding: 12px; border-radius: 8px; overflow-x: auto; }
+
+section { margin-top: 28px; }
+h2 { font-size: 1.1rem; }
+
+.carrier-card {
+  border: 1px solid #8884;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.carrier-card .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.carrier-card .name { font-weight: 600; }
+.badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 999px; }
+.badge.ok { background: #2e9e9233; color: #2E9E92; }
+.badge.needs-login { background: #e8192c33; color: #E8192C; }
+.badge.error { background: #ff8ac733; color: #b05a86; }
+.badge.unknown { background: #8884; }
+
+form.cred-form { display: flex; gap: 6px; flex-wrap: wrap; }
+form.cred-form input { flex: 1; min-width: 120px; padding: 6px 8px; }
+label.remember { font-size: 0.8rem; display: flex; align-items: center; gap: 4px; }
+
+button { cursor: pointer; padding: 6px 12px; border-radius: 6px; border: 1px solid #8886; background: #8881; }
+button:hover { background: #8883; }
+
+.usage-card { border-left: 4px solid #888; padding: 8px 12px; margin-bottom: 8px; border-radius: 4px; background: #8881; }
+.usage-card.SKT { border-left-color: var(--skt); }
+.usage-card.KT { border-left-color: var(--kt); }
+.usage-card.LGU\+ { border-left-color: var(--lgu); }
+.usage-card .title { font-weight: 600; }
+.usage-card .metrics { font-size: 0.9rem; display: flex; gap: 14px; flex-wrap: wrap; }
+form.nick-form { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+form.nick-form input { flex: 1; min-width: 140px; padding: 5px 8px; }
+form.nick-form .muted { font-size: 0.78rem; }
+
+.modal { position: fixed; inset: 0; background: #000c; display: flex; align-items: center; justify-content: center; z-index: 10; }
+.modal.hidden { display: none; }
+.modal-box { background: #111; color: #eee; padding: 12px; border-radius: 10px; max-width: 95vw; }
+.modal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+#remoteCanvas { max-width: 100%; height: auto; border: 1px solid #444; cursor: pointer; }
+.modal-controls { display: flex; gap: 6px; margin-top: 8px; }
+.modal-controls input { flex: 1; padding: 6px 8px; }

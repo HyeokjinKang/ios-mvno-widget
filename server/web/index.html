@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>알뜰폰 사용량 모아보기</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+<header>
+  <h1>알뜰폰 사용량 모아보기</h1>
+  <p class="sub">여기서 각 통신사에 로그인해두면 서버가 주기적으로 사용량을 수집합니다. Scriptable 위젯은 이 서버의 <code>/api/usage</code>만 읽습니다.</p>
+</header>
+
+<main>
+  <section id="carriers"></section>
+
+  <section>
+    <h2>수집된 사용량</h2>
+    <button id="refreshBtn">지금 새로고침</button>
+    <span id="lastRefresh" class="muted"></span>
+    <div id="usageList"></div>
+  </section>
+
+  <section>
+    <h2>Scriptable 설정값</h2>
+    <p class="muted">아래 값을 <code>scriptable/MVNO-Usage.js</code> 상단 CONFIG에 붙여넣으세요.</p>
+    <pre id="scriptableConfig">SERVER_URL = (이 서버를 외부에서 접근 가능한 주소로)
+WIDGET_TOKEN = .env의 MVNO_WIDGET_TOKEN 값</pre>
+  </section>
+</main>
+
+<div id="remoteModal" class="modal hidden">
+  <div class="modal-box">
+    <div class="modal-head">
+      <span id="remoteTitle">원격 로그인</span>
+      <button id="remoteClose">닫기</button>
+    </div>
+    <canvas id="remoteCanvas" width="430" height="820"></canvas>
+    <div class="modal-controls">
+      <input id="remoteInput" type="text" placeholder="입력할 텍스트를 여기 타이핑 (자동 전달)" autocomplete="off" />
+      <button id="remoteEnter">Enter</button>
+      <button id="remoteBackspace">←지움</button>
+    </div>
+    <p id="remoteStatus" class="muted"></p>
+  </div>
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
