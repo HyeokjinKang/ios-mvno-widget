@@ -51,14 +51,14 @@ function addBar(container, metric, color, width) {
   const track = container.addStack();
   track.layoutHorizontally();
   track.size = new Size(width, 6);
-  track.backgroundColor = color.alpha(0.2);
+  track.backgroundColor = new Color(color.hex, 0.2);
   track.cornerRadius = 3;
 
   const frac = remainFraction(metric);
   if (metric?.unlimited) {
     const full = track.addStack();
     full.size = new Size(width, 6);
-    full.backgroundColor = color.alpha(0.55);
+    full.backgroundColor = new Color(color.hex, 0.55);
     full.cornerRadius = 3;
   } else if (frac != null && frac > 0) {
     const remain = track.addStack();
