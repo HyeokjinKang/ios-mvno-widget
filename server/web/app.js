@@ -188,12 +188,24 @@ canvas.addEventListener(
   { passive: false },
 );
 
-remoteInput.addEventListener("input", () => {
+// 한글 IME는 조합 중에도 input 이벤트를 흘린다. 그때마다 전송하면 자모가 하나씩 따로
+// 전달돼 "안녕"이 "ㅇㅏㄴ..."으로 깨진다. 조합이 끝난 문자열을 전송 시점에 한 번만 보낸다.
+function sendRemoteText() {
   if (!ws || ws.readyState !== WebSocket.OPEN) return;
   const text = remoteInput.value;
-  if (text) ws.send(JSON.stringify({ type: "type", text }));
+  if (!text) return;
+  ws.send(JSON.stringify({ type: "type", text }));
   remoteInput.value = "";
+}
+
+remoteInput.addEventListener("keydown", (e) => {
+  // 조합 확정용 Enter(isComposing)는 전송으로 치지 않는다.
+  if (e.key !== "Enter" || e.isComposing) return;
+  e.preventDefault();
+  sendRemoteText();
 });
+
+document.getElementById("remoteSend").addEventListener("click", sendRemoteText);
 
 document.getElementById("remoteEnter").addEventListener("click", () => {
   ws?.send(JSON.stringify({ type: "key", key: "Enter" }));

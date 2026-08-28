@@ -38,7 +38,10 @@ WIDGET_TOKEN = .env의 MVNO_WIDGET_TOKEN 값</pre>
     </div>
     <canvas id="remoteCanvas" width="430" height="820"></canvas>
     <div class="modal-controls">
-      <input id="remoteInput" type="text" placeholder="입력할 텍스트를 여기 타이핑 (자동 전달)" autocomplete="off" />
+      <input id="remoteInput" type="text" placeholder="텍스트 입력 후 전송"
+             autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false"
+             enterkeyhint="send" />
+      <button id="remoteSend">전송</button>
       <button id="remoteEnter">Enter</button>
       <button id="remoteBackspace">←지움</button>
     </div>
