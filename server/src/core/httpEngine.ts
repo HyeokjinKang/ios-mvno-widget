@@ -47,6 +47,10 @@ export class HttpEngine {
 
     let redirects = 0;
     for (;;) {
+      // 일부 사업자(엠모바일 등)는 Location 헤더를 http:// 로 내려준다. 평문으로 보내면
+      // 쿠키가 노출되므로, 요청을 보내기 전에 https로 승격한다. 승격이 불가능한 스킴이면
+      // 그대로 거부한다.
+      if (target.protocol === "http:") target.protocol = "https:";
       if (target.protocol !== "https:") {
         throw new Error(`HTTPS만 허용됨: ${target.toString()}`);
       }
