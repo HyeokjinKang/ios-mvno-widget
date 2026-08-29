@@ -25,6 +25,21 @@ const NETWORK_COLOR = {
 };
 const DEFAULT_COLOR = new Color("#8E8E93");
 
+// 위젯을 탭하면 Scriptable이 열리면서 이 스크립트를 다시 실행한다.
+// iOS 위젯은 탭으로 코드를 직접 돌릴 수 없어서, 앱을 거쳐 갱신하는 방식만 가능하다.
+function tapUrl() {
+  return `scriptable:///run?scriptName=${encodeURIComponent(Script.name())}`;
+}
+
+// 서버에 즉시 수집을 요청한다. 위젯 안에서는 시간이 오래 걸려 돌리지 않고,
+// 탭해서 앱으로 들어왔을 때만 부른다.
+async function requestRefresh() {
+  const req = new Request(`${CONFIG.SERVER_URL}/api/refresh?token=${encodeURIComponent(CONFIG.WIDGET_TOKEN)}`);
+  req.method = "POST";
+  req.timeoutInterval = 60;
+  await req.loadJSON();
+}
+
 async function fetchUsage() {
   const url = `${CONFIG.SERVER_URL}/api/usage?token=${encodeURIComponent(CONFIG.WIDGET_TOKEN)}`;
   const req = new Request(url);
@@ -169,7 +184,7 @@ function addFooter(w, data, gap) {
 function buildWidget(data, family) {
   const w = new ListWidget();
   w.backgroundColor = Color.dynamic(new Color("#ffffff"), new Color("#1c1c1e"));
-  w.url = CONFIG.SERVER_URL;
+  w.url = tapUrl();
   w.setPadding(12, 14, 10, 14);
 
   // 로그인 안내는 서버가 준 전체 목록 기준으로 판단하고(addHeader), 표시는 범위만 한다.
@@ -220,7 +235,7 @@ function buildWidget(data, family) {
 function errorWidget(message) {
   const w = new ListWidget();
   w.setPadding(14, 14, 14, 14);
-  w.url = CONFIG.SERVER_URL;
+  w.url = tapUrl();
   const title = w.addText("MVNO 잔여량");
   title.font = Font.boldSystemFont(14);
   w.addSpacer(6);
@@ -236,6 +251,12 @@ async function run() {
   try {
     if (!CONFIG.SERVER_URL.startsWith("http") || CONFIG.WIDGET_TOKEN.startsWith("REPLACE")) {
       throw new Error("CONFIG.SERVER_URL / WIDGET_TOKEN을 먼저 설정하세요");
+    }
+    // 위젯을 탭해서 앱으로 들어온 경우에만 서버 수집을 먼저 돌린다.
+    // 위젯 안에서는 실행 시간이 짧게 제한돼 있어 저장된 값만 읽는다.
+    // 수집이 실패해도 마지막으로 모아둔 값은 보여준다.
+    if (!config.runsInWidget) {
+      await requestRefresh().catch(() => {});
     }
     const data = await fetchUsage();
     widget = buildWidget(data, config.widgetFamily ?? "medium");
