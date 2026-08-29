@@ -9,11 +9,12 @@ const CONFIG = {
   // /api/usage 는 이 토큰만으로 인증하므로 대시보드의 Basic Auth와는 무관하다.
   WIDGET_TOKEN: "REPLACE_WITH_MVNO_WIDGET_TOKEN",
 
-  // 표시할 회선 범위. 0부터 시작하고 END는 포함하지 않는다 (Array.slice와 동일).
-  // 회선이 6개일 때 앞 3개만 보려면 START 0 / END 3, 뒤 3개만 보려면 START 3 / END null.
-  // 위젯을 여러 개 놓고 각각 다른 범위를 지정하면 회선을 나눠 볼 수 있다.
-  LINE_START: 0,
-  LINE_END: null, // null이면 끝까지
+  // 표시할 회선 인덱스. 0부터 시작하고, 적은 순서 그대로 표시된다.
+  // 예) [0, 2]  -> 첫 번째와 세 번째 회선만
+  //     [2, 0]  -> 세 번째를 위에, 첫 번째를 아래에
+  // null이나 빈 배열이면 전체를 서버가 준 순서대로 보여준다.
+  // 위젯을 여러 개 놓고 각각 다른 인덱스를 지정하면 회선을 나눠 볼 수 있다.
+  LINE_INDEXES: null,
 };
 // =====================================================
 
@@ -144,11 +145,12 @@ function addLineRow(container, line, { showVoiceSms, barWidth }) {
   }
 }
 
-// CONFIG의 범위만 잘라낸다. 잘못된 값이 들어와도 위젯이 죽지 않도록 정수가 아니면 무시한다.
+// CONFIG가 지정한 인덱스만 그 순서대로 골라낸다. 잘못된 값이 들어와도 위젯이 죽지 않도록
+// 정수가 아니거나 범위를 벗어난 인덱스는 건너뛴다.
 function selectLines(all) {
-  const start = Number.isInteger(CONFIG.LINE_START) ? CONFIG.LINE_START : 0;
-  const end = Number.isInteger(CONFIG.LINE_END) ? CONFIG.LINE_END : all.length;
-  return all.slice(start, end);
+  const picked = CONFIG.LINE_INDEXES;
+  if (!Array.isArray(picked) || picked.length === 0) return all;
+  return picked.filter((i) => Number.isInteger(i) && i >= 0 && i < all.length).map((i) => all[i]);
 }
 
 // 제목-본문, 본문-갱신시각 사이 간격. small은 높이가 빠듯해 조금 좁게 잡는다.
