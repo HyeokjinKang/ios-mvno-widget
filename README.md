@@ -74,7 +74,7 @@ npm run dev                  # http://localhost:8787
 
 | 경로 | 인증 | 용도 |
 |---|---|---|
-| `/api/usage` | `MVNO_WIDGET_TOKEN` Bearer/쿼리 토큰 | Scriptable 위젯 전용 (Basic Auth 없음) |
+| `/api/usage`, `/api/refresh` | `MVNO_WIDGET_TOKEN` Bearer/쿼리 토큰 | Scriptable 위젯 전용 (Basic Auth 없음) |
 | 그 외 전부 (`/`, `/api/status`, `/ws/`) | nginx Basic Auth | 대시보드·원격 브라우저 로그인 |
 
 대시보드에는 회선번호·요금제와 통신사 로그인 폼, 원격 브라우저 제어가 그대로 노출되므로
@@ -95,8 +95,10 @@ server {
     proxy_set_header X-Forwarded-Proto $scheme;
 
     # 위젯 전용. 자체 Bearer 토큰으로 인증하므로 Basic Auth 예외.
-    location /api/usage {
+    # /api/refresh 는 위젯을 탭했을 때 즉시 수집을 요청하는 경로다.
+    location ~ ^/api/(usage|refresh)$ {
         proxy_pass http://127.0.0.1:8787;
+        proxy_read_timeout 120s;
     }
 
     # 원격 브라우저 로그인 스크린캐스트. 프레임이 계속 흐르므로 타임아웃을 길게 잡는다.
@@ -133,7 +135,14 @@ certbot이 만드는 `/.well-known/acme-challenge/` 요청까지 401로 막혀 �
 `scriptable/MVNO-Usage.js`를 Scriptable 앱에 추가하고 상단 `CONFIG`의 `SERVER_URL`(위에서 만든
 도메인)과 `WIDGET_TOKEN`(`server/.env`의 `MVNO_WIDGET_TOKEN`)을 채운다. 그 뒤 홈 화면에
 위젯 추가 → 스크립트로 이 파일 선택. 위젯 크기별로 데이터는 항상 보이고, 통화/문자는 large에서만
-보이도록 접는다(§2.13 규칙 대응). 위젯을 탭하면 대시보드가 열린다(이때는 Basic Auth를 물어봄).
+보이도록 접는다(§2.13 규칙 대응).
+
+`CONFIG.LINE_START` / `LINE_END`로 표시할 회선 범위를 자를 수 있어(`Array.slice`와 같은 의미),
+위젯을 여러 개 놓고 회선을 나눠 볼 수 있다.
+
+위젯을 탭하면 Scriptable이 열리면서 이 스크립트가 다시 실행된다. 그때는 `/api/refresh`로 서버에
+즉시 수집을 요청한 뒤 갱신된 값을 보여준다. iOS 위젯은 탭만으로 코드를 돌릴 수 없어 앱을 거치는
+방식뿐이고, 위젯 안에서는 실행 시간이 짧게 제한돼 있어 저장된 값만 읽는다.
 
 ## 보안 메모
 
