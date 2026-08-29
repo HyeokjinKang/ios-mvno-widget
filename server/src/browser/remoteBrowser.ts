@@ -56,9 +56,13 @@ class RemoteLoginSession extends EventEmitter {
     this.page.on("framenavigated", (frame) => {
       if (frame !== this.page?.mainFrame()) return;
       this.emit("event", { type: "url", url: frame.url() } satisfies RemoteLoginEvent);
-      if (!this.completed && this.carrier.isLoginComplete?.(frame.url())) {
+      // 확인용 이동 중에는 중간 URL이 잠깐 스쳐가므로 여기서 완료로 속단하지 않는다.
+      if (this.probing || this.completed) return;
+      if (this.carrier.isLoginComplete?.(frame.url())) {
         this.finish().catch((err) => this.fail(err));
+        return;
       }
+      this.maybeProbeLogin(frame.url()).catch((err) => this.fail(err));
     });
 
     this.page.on("popup", (popup) => {
@@ -101,6 +105,41 @@ class RemoteLoginSession extends EventEmitter {
 
   activePage?: Page;
   activeCdp?: CDPSession;
+  private probing = false;
+  private lastProbeAt = 0;
+
+  // URL만으로 로그인 여부를 알 수 없는 사업자를 위해, 로그인 전용 페이지로 이동해 본다.
+  // 로그인 화면으로 튕기면 사용자가 계속 조작하도록 두고, 그대로 열리면 완료 처리한다.
+  private async maybeProbeLogin(url: string): Promise<void> {
+    if (this.completed || this.probing || !this.page) return;
+    const target = this.carrier.loginProbeFor?.(url);
+    if (!target) return;
+    // 로그인 화면과 메인을 오가며 확인이 반복될 수 있어 최소 간격을 둔다.
+    if (Date.now() - this.lastProbeAt < 2000) return;
+
+    this.probing = true;
+    this.lastProbeAt = Date.now();
+    try {
+      await this.page.goto(target, { waitUntil: "domcontentloaded", timeout: 20000 });
+      // 알닷은 로그인 화면으로 보내는 리다이렉트가 서버가 아니라 스크립트에서, 그것도
+      // 2~3초 뒤에 일어난다. 곧바로 URL을 읽으면 아직 확인용 주소라 로그인한 것으로 오해한다.
+      // 주소가 바뀔 때까지 기다리되, 끝까지 그대로면(=로그인 상태) 시간 초과로 빠져나온다.
+      await this.page
+        .waitForURL((u) => !u.toString().startsWith(target), { timeout: 6000 })
+        .catch(() => {});
+      await this.page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {});
+      const settled = this.page.url();
+      this.emit("event", { type: "url", url: settled } satisfies RemoteLoginEvent);
+      if (!this.completed && this.carrier.isLoginComplete?.(settled)) {
+        this.probing = false;
+        await this.finish();
+      }
+    } catch {
+      // 확인 실패는 로그인 실패가 아니다. 사용자가 계속 조작할 수 있게 둔다.
+    } finally {
+      this.probing = false;
+    }
+  }
 
   private targetPage(): Page {
     return this.activePage ?? this.page!;
