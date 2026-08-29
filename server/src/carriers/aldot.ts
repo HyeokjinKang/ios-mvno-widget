@@ -70,6 +70,13 @@ export const aldotAdapter: CarrierAdapter = {
     return url.includes("/care/");
   },
 
+  // 로그인을 마치면 /care/ 가 아니라 메인(https://www.uplusmvno.com/)으로 돌아오기 때문에
+  // URL만 봐서는 완료 여부를 알 수 없다. 로그인이 필요한 회선정보 페이지로 이동해 보고
+  // /login 으로 튕기면 아직 미완료, 그대로 열리면 완료로 판단한다.
+  loginProbeFor(url) {
+    return /^https:\/\/www\.uplusmvno\.com\/?(?:[?#].*)?$/.test(url) ? `${WEB}/care/entr/entr-info` : null;
+  },
+
   async refreshSession(http) {
     const res = await http.request({
       method: "POST",

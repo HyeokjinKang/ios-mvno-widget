@@ -18,6 +18,12 @@ export interface CarrierAdapter {
   hasSession(http: HttpEngine): boolean;
   /** webonly: 원격 브라우저가 이 URL에 도달하면 로그인 완료로 판단 */
   isLoginComplete?(url: string): boolean;
+  /**
+   * webonly: URL만으로 로그인 여부를 알 수 없을 때 확인용으로 이동해 볼 주소.
+   * 로그인 전용 페이지로 이동시켜 보고, 로그인 화면으로 튕기면 아직 미완료로 본다.
+   * 확인이 필요 없는 URL이면 null을 돌려준다.
+   */
+  loginProbeFor?(url: string): string | null;
   /** credential: 아이디/비밀번호 직접 로그인 */
   login?(http: HttpEngine, userId: string, password: string): Promise<boolean>;
   /** 전용 세션 갱신 엔드포인트 호출 (조회 API만으로는 세션이 연장되지 않음) */
