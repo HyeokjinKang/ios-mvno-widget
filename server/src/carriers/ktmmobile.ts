@@ -163,6 +163,9 @@ function metricFromWindow(text: string, htmlWindow: string, unit: MetricUnit): M
   if (total == null && used != null && remain != null) total = used + remain;
   if (used == null && total != null && remain != null) used = Math.max(0, total - remain);
 
+  // 0/0은 실제 사용량이 아니라 엉뚱한 곳(안내문, 빈 칸)을 읽은 경우라 미상으로 본다.
+  if (total === 0 && (used ?? 0) === 0 && (remain ?? 0) === 0) return Metric.UNKNOWN;
+
   if (total != null && used != null) {
     const m = Metric.ofRaw(used, total, unit);
     // 사이트가 잔여량을 따로 적어줬다면 그 값을 우선한다 (이월/쿠폰 등으로 단순 차와 다를 수 있음).
@@ -228,15 +231,19 @@ export function parseUsageHtml(html: string): { data: Metric; voice: Metric; sms
   return result;
 }
 
-function dumpForDebug(html: string): void {
+// MVNO_DEBUG_DUMP=1 이면 이용량 화면을 받을 때마다 원본을 남긴다. 파싱이 "성공"했지만 값이 틀린
+// 경우도 있어서 실패할 때만 남기면 마크업을 확인할 수 없다. 회선마다 파일을 따로 둔다.
+function dumpForDebug(html: string, line: LineRef, reason: string): void {
   if (process.env.MVNO_DEBUG_DUMP !== "1") return;
   try {
     const dir = `${DATA_DIR}/debug`;
     mkdirSync(dir, { recursive: true });
-    writeFileSync(`${dir}/ktmmobile-callView01.html`, html, { mode: 0o600 });
-    console.warn(`[ktmmobile] 사용량을 읽지 못해 ${dir}/ktmmobile-callView01.html 에 원본을 저장했습니다`);
-  } catch {
-    // 디버그 저장 실패는 무시
+    const suffix = line.id === "default" ? "" : `-${line.id.slice(-3)}`;
+    const file = `${dir}/ktmmobile-callView01${suffix}.html`;
+    writeFileSync(file, html, { mode: 0o600 });
+    console.warn(`[ktmmobile] ${reason}: ${file} 에 원본을 저장했습니다`);
+  } catch (err) {
+    console.warn(`[ktmmobile] 디버그 파일 저장 실패:`, (err as Error).message);
   }
 }
 
@@ -413,10 +420,9 @@ export const ktmmobileAdapter: CarrierAdapter = {
   async fetchUsage(http, line) {
     const html = await usagePage(http, line.id === "default" ? null : line.id);
     const { data, voice, sms } = parseUsageHtml(html);
-    if (data === Metric.UNKNOWN && voice === Metric.UNKNOWN && sms === Metric.UNKNOWN) {
-      dumpForDebug(html);
-      throw new Error("kt M모바일 이용량 화면에서 사용량을 찾지 못했습니다");
-    }
+    const nothing = data === Metric.UNKNOWN && voice === Metric.UNKNOWN && sms === Metric.UNKNOWN;
+    dumpForDebug(html, line, nothing ? "사용량을 읽지 못함" : data === Metric.UNKNOWN ? "데이터를 읽지 못함" : "이용량 화면 저장");
+    if (nothing) throw new Error("kt M모바일 이용량 화면에서 사용량을 찾지 못했습니다");
     return {
       lineKey: line.phone || `ktmmobile:${line.id}`,
       label: line.label,
