@@ -240,21 +240,102 @@ function dumpForDebug(html: string): void {
   }
 }
 
+// 서버 요청은 모바일 UA라 PC 주소로 가면 /m/ 으로 돌려보내진다. 그 과정에서 POST 본문(ncn)이
+// 사라질 수 있어 처음부터 모바일 주소에 GET ?ncn= 으로 요청한다 (사이트의 중간 페이지도 이 형태로 이동).
+const M_USAGE_PATH = "/m/mypage/callView01.do";
+/** 같은 화면을 연달아 요청하면 "처리중인 업무가 있습니다"로 거절하므로 요청 간 최소 간격을 둔다. */
+const MIN_GAP_MS = 1500;
+const CACHE_TTL_MS = 2 * 60 * 1000;
+const MAX_ATTEMPTS = 4;
+
+interface RedirectPage {
+  message: string;
+  redirectUrl: string;
+  params: Record<string, string>;
+}
+
+// 업무 처리 중·오류 시 내려오는 "MCP Redirect Page". alert(successMsg) 후 redirectUrl로 이동시킨다.
+export function parseRedirectPage(body: string): RedirectPage | null {
+  if (!/<title>\s*MCP Redirect Page\s*<\/title>/i.test(body) && !/var\s+redirectUrl\s*=/.test(body)) return null;
+  const message = /var\s+successMsg\s*=\s*'([^']*)'/.exec(body)?.[1]?.trim() ?? "";
+  const redirectUrl = /var\s+redirectUrl\s*=\s*'([^']*)'/.exec(body)?.[1]?.trim() ?? "";
+  const params: Record<string, string> = {};
+  const arr = /var\s+paraArray\s*=\s*\[([\s\S]*?)\];/.exec(body)?.[1] ?? "";
+  for (const m of arr.matchAll(/\[\s*"(\w+)"\s*,\s*"([^"]*)"\s*\]/g)) {
+    if (m[2] !== "") params[m[1]] = m[2];
+  }
+  return { message, redirectUrl, params };
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// 한 번의 갱신(같은 HttpEngine) 안에서 받은 화면을 재사용한다. 세션 확인 → 회선 목록 → 첫 회선
+// 사용량이 모두 같은 화면이라, 매번 새로 요청하면 두 번째부터 "처리중" 거절을 맞는다.
+interface PageCache {
+  pages: Map<string, { html: string; at: number }>;
+  lastRequestAt: number;
+  /** 기본 화면(ncn 없이 연 화면)이 보여준 회선의 ncn */
+  defaultNcn?: string;
+}
+const caches = new WeakMap<HttpEngine, PageCache>();
+function cacheOf(http: HttpEngine): PageCache {
+  let c = caches.get(http);
+  if (!c) caches.set(http, (c = { pages: new Map(), lastRequestAt: 0 }));
+  return c;
+}
+
+function selectedNcn(html: string): string | undefined {
+  for (const id of ["ctn", "ncn"]) {
+    const sel = new RegExp(`<select[^>]*\\bid="${id}"[^>]*>([\\s\\S]*?)</select>`).exec(html)?.[1];
+    if (!sel) continue;
+    const chosen = /<option[^>]*\bselected\b[^>]*\bvalue="([^"]+)"|<option[^>]*\bvalue="([^"]+)"[^>]*\bselected\b/.exec(sel);
+    const v = chosen?.[1] ?? chosen?.[2] ?? /<option[^>]*\bvalue="([^"]+)"/.exec(sel)?.[1];
+    if (v) return v.trim();
+  }
+  return hiddenValue(html, "ncn");
+}
+
 async function usagePage(http: HttpEngine, ncn: string | null): Promise<string> {
-  const res =
-    ncn == null
-      ? await http.request({ method: "GET", url: WEB + USAGE_PATH, origin: WEB, referer: `${WEB}/main.do` })
-      : await http.request({
-          method: "POST",
-          url: WEB + USAGE_PATH,
-          body: HttpEngine.form({ ncn }),
-          contentType: "application/x-www-form-urlencoded",
-          origin: WEB,
-          referer: WEB + USAGE_PATH,
-        });
-  if (ktmmobileAdapter.isSessionExpired(res.code, res.body)) throw new SessionExpiredError();
-  if (!res.isSuccess) throw new Error(`kt M모바일 이용량 페이지 조회 실패: HTTP ${res.code}`);
-  return res.body;
+  const cache = cacheOf(http);
+  const key = ncn == null || ncn === cache.defaultNcn ? "" : ncn;
+  const hit = cache.pages.get(key) ?? (ncn != null ? cache.pages.get(ncn) : undefined);
+  if (hit && Date.now() - hit.at < CACHE_TTL_MS) return hit.html;
+
+  let url = WEB + M_USAGE_PATH;
+  let query: Record<string, string> | undefined = key ? { ncn: key } : undefined;
+  let lastMessage = "";
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const gap = Date.now() - cache.lastRequestAt;
+    if (gap < MIN_GAP_MS) await sleep(MIN_GAP_MS - gap);
+    cache.lastRequestAt = Date.now();
+
+    const res = await http.request({ method: "GET", url, query, origin: WEB, referer: `${WEB}/m/main.do` });
+    if (ktmmobileAdapter.isSessionExpired(res.code, res.body)) throw new SessionExpiredError();
+    if (!res.isSuccess) throw new Error(`kt M모바일 이용량 페이지 조회 실패: HTTP ${res.code}`);
+
+    const rp = parseRedirectPage(res.body);
+    if (!rp) {
+      cache.pages.set(key, { html: res.body, at: Date.now() });
+      if (key === "") cache.defaultNcn = selectedNcn(res.body);
+      return res.body;
+    }
+
+    lastMessage = rp.message;
+    if (/로그인/.test(rp.message)) throw new SessionExpiredError(rp.message);
+    // 같은 사이트의 이용량 화면으로 보내는 경우만 따라간다.
+    if (rp.redirectUrl) {
+      const next = new URL(rp.redirectUrl, WEB);
+      if (!next.hostname.endsWith("ktmmobile.com") || !isUsageUrl(next.toString())) {
+        throw new Error(`kt M모바일: ${rp.message || "예상하지 못한 이동"} (${next.pathname})`);
+      }
+      url = `${next.origin}${next.pathname}`;
+      query = { ...Object.fromEntries(next.searchParams), ...rp.params };
+      if (key && !query.ncn) query.ncn = key;
+    }
+    // "처리중인 업무가 있습니다" 류는 잠시 기다렸다가 다시 시도한다.
+    if (rp.message) await sleep(2000 * (attempt + 1));
+  }
+  throw new Error(`kt M모바일: ${lastMessage || "이용량 화면을 열지 못했습니다"}`);
 }
 
 function isUsageUrl(url: string): boolean {
@@ -302,8 +383,9 @@ export const ktmmobileAdapter: CarrierAdapter = {
     try {
       await usagePage(http, null);
       return true;
-    } catch {
-      return false;
+    } catch (err) {
+      // "처리중" 같은 일시 오류는 세션 만료가 아니다. 다시 로그인하라고 띄우지 않는다.
+      return !(err instanceof SessionExpiredError);
     }
   },
 
