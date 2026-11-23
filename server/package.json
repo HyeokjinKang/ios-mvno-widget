@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "type": "module",
-  "description": "알뜰폰 5개 사업자 로그인/사용량 수집 서버. Scriptable 위젯에 정제된 JSON을 제공한다.",
+  "description": "알뜰폰 6개 사업자 로그인/사용량 수집 서버. Scriptable 위젯에 정제된 JSON을 제공한다.",
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "tsx src/index.ts",
