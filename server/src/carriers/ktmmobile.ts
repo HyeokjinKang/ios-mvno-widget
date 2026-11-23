@@ -194,7 +194,86 @@ function metricFromWindow(text: string, htmlWindow: string, unit: MetricUnit): M
 }
 
 /** 본문을 데이터/음성/문자 구역으로 나눠 각 구역의 사용량을 읽는다. */
+// ── 실제 이용량 화면 구조 (모바일 /m/mypage/callView01.do) ──
+// <div class="c-item ...">
+//   <div class="c-item__title"> ... <span class="u-ml--4">데이터-합계</span> ...
+//     <span ...><span ...>사용 41.4MB</span> / 잔여 7.96GB</span>
+//   </div>
+//   <div class="c-indicator ..."><span class="mark-mint" style="width:99%"></span></div>
+// </div>
+// 항목: 데이터-3G, 데이터-5G(LTE), 데이터-합계, 음성, 영상/부가, SMS/MMS.
+// 제공량은 따로 없고 사용+잔여가 제공량이다 (요금제 표기 30GB와 달리 가입월 일할 적용분이 들어감).
+// 잔여가 "기본제공"이면 무제한이다.
+interface UsageItem {
+  title: string;
+  usedText: string;
+  remainText: string;
+  widthPercent: number | null;
+}
+
+export function parseUsageItems(html: string): UsageItem[] {
+  const out: UsageItem[] = [];
+  const blocks = html.split(/<div class="c-item c-item--type1\b/).slice(1);
+  for (const raw of blocks) {
+    // 다음 항목 바깥(버튼·안내문)까지 딸려오지 않게 indicator까지만 본다.
+    const ind = raw.indexOf('class="c-indicator');
+    const close = ind >= 0 ? raw.indexOf("</div>", ind) : -1;
+    const block = close > 0 ? raw.slice(0, close) : raw.slice(0, 2000);
+    const title = stripTags(/<(?:span|sapn) class="u-ml--4">([\s\S]*?)<\/(?:span|sapn)>/.exec(block)?.[1] ?? "");
+    const text = stripTags(block);
+    const m = /사용\s*(.+?)\s*\/\s*잔여\s*(.+?)\s*$/.exec(text);
+    if (!title || !m) continue;
+    const w = /style="width:\s*([0-9.]+)%/.exec(block)?.[1];
+    out.push({ title, usedText: m[1].trim(), remainText: m[2].trim(), widthPercent: w != null ? parseFloat(w) : null });
+  }
+  return out;
+}
+
+function itemMetric(item: UsageItem, unit: MetricUnit): Metric {
+  const used = parseAmount(item.usedText, unit) ?? 0;
+  if (/기본\s*제공|무제한/.test(item.remainText)) return Metric.unlimited(formatUnit(unit, used));
+  const remain = parseAmount(item.remainText, unit);
+  if (remain == null) return Metric.UNKNOWN;
+  if (used === 0 && remain === 0) return Metric.UNKNOWN;
+  const m = Metric.ofRaw(used, used + remain, unit);
+  // 사이트 표기를 그대로 보여준다 (예: "7.96GB").
+  m.remainText = item.remainText;
+  m.usedText = item.usedText;
+  return m;
+}
+
+function metricFromItems(items: UsageItem[], unit: MetricUnit, primary: RegExp, others: RegExp): Metric {
+  const main = items.find((i) => primary.test(i.title));
+  if (main) {
+    const m = itemMetric(main, unit);
+    if (m !== Metric.UNKNOWN) return m;
+  }
+  // 합계 항목이 없으면 같은 종류 항목을 더한다.
+  const parts = items.filter((i) => others.test(i.title)).map((i) => itemMetric(i, unit)).filter((m) => m !== Metric.UNKNOWN);
+  if (parts.length === 0) return Metric.UNKNOWN;
+  if (parts.length === 1) return parts[0];
+  if (parts.some((p) => p.unlimited)) return Metric.unlimited(formatUnit(unit, parts.reduce((a, p) => a + (p.usedRaw ?? 0), 0)));
+  const used = parts.reduce((a, p) => a + (p.usedRaw ?? 0), 0);
+  const total = parts.reduce((a, p) => a + (p.totalRaw ?? 0), 0);
+  return Metric.ofRaw(used, total, unit);
+}
+
+export function parsePlanName(html: string): string | undefined {
+  const v = /id="strSvcNameSms"[^>]*>([^<]*)</.exec(html)?.[1];
+  return v ? decodeEntities(v).trim() || undefined : undefined;
+}
+
 export function parseUsageHtml(html: string): { data: Metric; voice: Metric; sms: Metric } {
+  const items = parseUsageItems(html);
+  if (items.length > 0) {
+    return {
+      data: metricFromItems(items, "BYTES", /^데이터\s*-\s*합계/, /^데이터/),
+      // "영상/부가"는 영상통화·부가통화 별도 제공량이라 음성에 섞지 않는다.
+      voice: metricFromItems(items, "SECONDS", /^음성/, /^음성/),
+      sms: metricFromItems(items, "COUNT", /SMS|MMS|문자/, /SMS|MMS|문자/),
+    };
+  }
+  // 아래는 화면 구조가 바뀌었을 때를 위한 범용 추정 파서다.
   const region = contentRegion(html);
   // 구역 경계는 HTML 기준으로 잡아야 data-percent 같은 속성도 함께 볼 수 있다.
   // 라벨은 태그 밖 텍스트에서만 찾는다.
@@ -426,7 +505,7 @@ export const ktmmobileAdapter: CarrierAdapter = {
     return {
       lineKey: line.phone || `ktmmobile:${line.id}`,
       label: line.label,
-      planName: line.planName,
+      planName: parsePlanName(html) ?? line.planName,
       carrierName: "kt M모바일",
       network: NETWORK,
       data,
